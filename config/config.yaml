@@ -1,0 +1,6 @@
+http:
+  port: 8080
+  timeout:
+    read: 5s
+    write: 5s
+    idle: 30s
