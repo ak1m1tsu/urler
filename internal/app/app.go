@@ -13,6 +13,7 @@ type Application struct {
 	cfg *config.Config
 }
 
+// New creates Urler application
 func New(configPath string) *Application {
 	var (
 		app = new(Application)
@@ -25,10 +26,12 @@ func New(configPath string) *Application {
 	return app
 }
 
+// Run starts the main process of the application
 func (app *Application) Run() {
 	fmt.Println("do nothing")
 }
 
+// exitOnError calls exitOnError if err isn't nil
 func (app *Application) exitOnError(err error) {
 	if err != nil {
 		fmt.Println(err.Error())
