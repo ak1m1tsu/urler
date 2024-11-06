@@ -2,15 +2,25 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 
+	"github.com/ak1m1tsu/urler/internal/app/api"
 	"github.com/ak1m1tsu/urler/internal/pkg/config"
+	"github.com/ak1m1tsu/urler/internal/pkg/service"
+	"golang.org/x/sync/errgroup"
 )
 
 // Application represents the Urler application
 type Application struct {
-	cfg *config.Config
+	ctx  context.Context
+	cfg  *config.Config
+	errg *errgroup.Group
 }
 
 // New creates Urler application
@@ -28,13 +38,48 @@ func New(configPath string) *Application {
 
 // Run starts the main process of the application
 func (app *Application) Run() {
-	fmt.Println("do nothing")
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
+
+	app.errg, app.ctx = errgroup.WithContext(ctx)
+
+	svc := service.New(app.cfg)
+
+	router := api.Router(svc)
+
+	srv := http.Server{
+		Addr:         fmt.Sprintf(":%d", app.cfg.HTTP.Port),
+		Handler:      router,
+		IdleTimeout:  app.cfg.HTTP.Timeout.Idle,
+		ReadTimeout:  app.cfg.HTTP.Timeout.Read,
+		WriteTimeout: app.cfg.HTTP.Timeout.Write,
+	}
+
+	app.errg.Go(func() error {
+		return srv.ListenAndServe()
+	})
+
+	app.errg.Go(func() error {
+		<-ctx.Done()
+		cancel()
+		return srv.Shutdown(context.Background())
+	})
+
+	err := app.errg.Wait()
+	if err != nil {
+		fmt.Println(err)
+	}
+
+	app.exitOnError(err)
 }
 
 // exitOnError calls exitOnError if err isn't nil
 func (app *Application) exitOnError(err error) {
 	if err != nil {
-		fmt.Println(err.Error())
+		if errors.Is(err, context.Canceled) || errors.Is(err, http.ErrServerClosed) {
+			return
+		}
+
+		fmt.Println(err)
 		os.Exit(1)
 	}
 }
